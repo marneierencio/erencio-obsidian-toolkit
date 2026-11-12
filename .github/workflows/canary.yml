@@ -43,8 +43,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           VERSION: ${{ steps.version.outputs.version }}
-          SOURCE: ${{ github.event_name == 'pull_request' && format('PR #{0} ({1})', github.event.pull_request.number, github.head_ref) || github.ref_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          if [ -n "${PR_NUMBER}" ]; then SOURCE="pull request ${PR_NUMBER} (${GITHUB_HEAD_REF})"; else SOURCE="${GITHUB_REF_NAME}"; fi
           gh release delete canary --yes --cleanup-tag || true
           gh release create canary main.js manifest.json styles.css \
             --prerelease \
