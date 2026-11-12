@@ -1,0 +1,10 @@
+{
+	"id": "erencio-toolkit",
+	"name": "Erencio Obsidian Toolkit",
+	"version": "0.1.0",
+	"minAppVersion": "1.5.0",
+	"description": "A personal toolkit: browse, install and update community plugins directly from their GitHub release assets.",
+	"author": "Marnei Erencio",
+	"authorUrl": "https://github.com/marneierencio",
+	"isDesktopOnly": false
+}
