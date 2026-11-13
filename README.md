@@ -46,6 +46,15 @@ Symlink or copy the repository into a test vault's `.obsidian/plugins/erencio-to
 
 To release: `npm version patch|minor|major` (updates `manifest.json` and `versions.json`), then `git push --follow-tags`.
 
+### Repository protection
+
+`main` and `development` only change through pull requests. The rules live in [`.github/rulesets`](.github/rulesets) and are applied once by a repository admin in **Settings → Rules → Rulesets → New ruleset → Import a ruleset**:
+
+- `protected-branches.json`: no direct pushes, force pushes or deletion. Requires a pull request with a passing `build` check, an up-to-date branch, resolved conversations and code owner approval ([CODEOWNERS](.github/CODEOWNERS)). Repository admins may bypass the approval only when merging a pull request, never with a direct push.
+- `release-tags.json`: `x.y.z` release tags cannot be moved or deleted.
+
+Recommended in **Settings → Actions → General**: require approval for workflows from all external contributors, set *Workflow permissions* to *Read repository contents*, and leave *Allow GitHub Actions to create and approve pull requests* unchecked.
+
 ## License
 
 [MIT](LICENSE)
