@@ -1,0 +1,24 @@
+{
+	"name": "erencio-obsidian-toolkit",
+	"version": "0.1.0",
+	"description": "A personal Obsidian toolkit: install and update community plugins from GitHub release assets.",
+	"main": "main.js",
+	"private": true,
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"typecheck": "tsc -noEmit -skipLibCheck",
+		"validate": "node scripts/validate.mjs",
+		"version": "node version-bump.mjs && git add manifest.json versions.json"
+	},
+	"keywords": ["obsidian", "obsidian-plugin"],
+	"author": "Marnei Erencio",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/node": "^22.20.5",
+		"esbuild": "^0.28.2",
+		"obsidian": "^1.14.4",
+		"tslib": "^2.9.1",
+		"typescript": "~5.9.3"
+	}
+}

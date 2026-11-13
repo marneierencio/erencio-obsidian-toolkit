@@ -1,0 +1,54 @@
+name: Canary
+
+# Publishes a rolling "canary" pre-release for every pull request to and push on
+# the development branch. Installable with BRAT (beta plugins) or by hand.
+on:
+  pull_request:
+    branches: [development]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [development]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: canary
+  cancel-in-progress: true
+
+jobs:
+  canary:
+    # Pull requests from forks get a read-only token and cannot publish.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run validate
+      - run: npm run build
+      - name: Stamp canary version
+        id: version
+        run: |
+          VERSION="$(node -p "require('./manifest.json').version")-canary.${GITHUB_RUN_NUMBER}"
+          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('manifest.json'));m.version='${VERSION}';fs.writeFileSync('manifest.json',JSON.stringify(m,null,'\t')+'\n')"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+      - name: Publish canary pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -n "${PR_NUMBER}" ]; then SOURCE="pull request ${PR_NUMBER} (${GITHUB_HEAD_REF})"; else SOURCE="${GITHUB_REF_NAME}"; fi
+          gh release delete canary --yes --cleanup-tag || true
+          gh release create canary main.js manifest.json styles.css \
+            --prerelease \
+            --target "${SHA}" \
+            --title "Canary ${VERSION}" \
+            --notes "Automated canary build ${VERSION} from ${SOURCE}, commit ${SHA}. Not for production use."
