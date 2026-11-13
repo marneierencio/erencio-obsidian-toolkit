@@ -67,14 +67,46 @@ export async function fetchLatestRelease(repo: string): Promise<LatestRelease> {
 	}
 }
 
+interface ApiAsset {
+	name: string;
+	browser_download_url: string;
+}
+
+/**
+ * Asset URLs of a release as listed by the GitHub API. These use the repository's
+ * current name, so they skip the extra redirect GitHub adds for renamed or
+ * transferred repositories. In some setups Obsidian's requestUrl gets HTTP 403
+ * when a download goes through more than one redirect.
+ */
+async function assetUrlsFromApi(repo: string, tag: string): Promise<Map<string, string>> {
+	const body = await get(`https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(tag)}`, {
+		Accept: "application/vnd.github+json",
+	});
+	const assets = (JSON.parse(body) as { assets?: ApiAsset[] }).assets ?? [];
+	return new Map(assets.map((a) => [a.name, a.browser_download_url]));
+}
+
 /** Downloads every plugin file of a release. */
 export async function downloadRelease(repo: string, release: LatestRelease): Promise<ReleaseFiles> {
+	let apiAssets: Promise<Map<string, string>> | null = null;
 	const fetchFile = async (file: string, required: boolean): Promise<string | null> => {
 		try {
 			return await get(releaseFileUrl(repo, release.tag, file));
 		} catch (err) {
 			if (!required && err instanceof HttpError && err.status === 404) return null;
-			throw describe(err, `download ${file} of ${repo} ${release.tag}`);
+			if (!(err instanceof HttpError)) throw describe(err, `download ${file} of ${repo} ${release.tag}`);
+			console.warn(`[erencio-toolkit] ${err.message}, retrying with the URL from the GitHub API`);
+			try {
+				apiAssets ??= assetUrlsFromApi(repo, release.tag);
+				const url = (await apiAssets).get(file);
+				if (!url) {
+					if (!required) return null;
+					throw new Error(`release ${release.tag} has no ${file} asset`);
+				}
+				return await get(url);
+			} catch (retryErr) {
+				throw describe(retryErr, `download ${file} of ${repo} ${release.tag} (first attempt: ${err.message})`);
+			}
 		}
 	};
 	const [manifestRaw, main, styles] = await Promise.all([
