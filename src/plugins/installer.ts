@@ -1,5 +1,5 @@
 import { apiVersion, App, normalizePath, PluginManifest } from "obsidian";
-import { fetchLatestManifest, fetchLatestRelease, ReleaseFiles } from "./github";
+import { downloadRelease, fetchLatestRelease, ReleaseFiles } from "./github";
 import { CommunityPlugin } from "./registry";
 import { compareVersions } from "./version";
 
@@ -37,7 +37,7 @@ export class PluginInstaller {
 	async checkUpdate(id: string, repo: string): Promise<string | null> {
 		const installed = this.getInstalled(id);
 		if (!installed) return null;
-		const latest = await fetchLatestManifest(repo);
+		const latest = await fetchLatestRelease(repo);
 		return compareVersions(latest.version, installed.version) > 0 ? latest.version : null;
 	}
 
@@ -84,7 +84,7 @@ export class PluginInstaller {
 	}
 
 	private async download(entry: CommunityPlugin): Promise<ReleaseFiles> {
-		const release = await fetchLatestRelease(entry.repo);
+		const release = await downloadRelease(entry.repo, await fetchLatestRelease(entry.repo));
 		if (release.manifest.id !== entry.id) {
 			throw new Error(`Release manifest id "${release.manifest.id}" does not match "${entry.id}".`);
 		}

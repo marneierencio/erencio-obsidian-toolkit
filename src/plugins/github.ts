@@ -11,33 +11,76 @@ export interface ReleaseFiles {
 	styles: string | null;
 }
 
-// Using the "releases/latest/download" redirect instead of the GitHub REST API
-// avoids the 60 requests/hour unauthenticated rate limit.
-function assetUrl(repo: string, file: string): string {
-	return `https://github.com/${repo}/releases/latest/download/${file}`;
+export interface LatestRelease {
+	version: string;
+	/** Git tag of the release, usually equal to the version. */
+	tag: string;
 }
 
-async function fetchAsset(repo: string, file: string, required: boolean): Promise<string | null> {
-	const res = await requestUrl({ url: assetUrl(repo, file), throw: false });
-	if (res.status === 404 && !required) return null;
-	if (res.status >= 400) {
-		throw new Error(`Could not download ${file} from ${repo} (HTTP ${res.status}).`);
+class HttpError extends Error {
+	constructor(public status: number, public url: string) {
+		super(`HTTP ${status} from ${url}`);
 	}
+}
+
+async function get(url: string, headers?: Record<string, string>): Promise<string> {
+	const res = await requestUrl({ url, headers, throw: false });
+	if (res.status >= 400) throw new HttpError(res.status, url);
 	return res.text;
 }
 
-/** Reads manifest.json from the latest release of a repository. */
-export async function fetchLatestManifest(repo: string): Promise<PluginManifest> {
-	const raw = await fetchAsset(repo, "manifest.json", true);
-	return parseManifest(raw as string, repo);
+function releaseFileUrl(repo: string, tag: string, file: string): string {
+	return `https://github.com/${repo}/releases/download/${encodeURIComponent(tag)}/${file}`;
 }
 
-/** Downloads every plugin file from the latest release of a repository. */
-export async function fetchLatestRelease(repo: string): Promise<ReleaseFiles> {
+/** Latest release according to the GitHub API (rate limited to 60 requests/hour). */
+async function latestFromApi(repo: string): Promise<LatestRelease> {
+	const body = await get(`https://api.github.com/repos/${repo}/releases/latest`, {
+		Accept: "application/vnd.github+json",
+	});
+	const tag = (JSON.parse(body) as { tag_name?: string }).tag_name;
+	if (!tag) throw new Error(`No release found for ${repo}.`);
+	return { tag, version: tag.replace(/^v/i, "") };
+}
+
+/**
+ * Finds the latest released version of a plugin.
+ *
+ * Mirrors Obsidian's own installer: read the version from manifest.json on the
+ * default branch and use it as the release tag. If that release does not exist
+ * (the version was bumped but not released, or tags use a "v" prefix), falls back
+ * to the GitHub API.
+ */
+export async function fetchLatestRelease(repo: string): Promise<LatestRelease> {
+	try {
+		const raw = await get(`https://raw.githubusercontent.com/${repo}/HEAD/manifest.json`);
+		const { version } = parseManifest(raw, repo);
+		const res = await requestUrl({ url: releaseFileUrl(repo, version, "manifest.json"), method: "HEAD", throw: false });
+		if (res.status < 400) return { version, tag: version };
+	} catch (err) {
+		console.warn(`[erencio-toolkit] ${repo}: falling back to the GitHub API`, err);
+	}
+	try {
+		return await latestFromApi(repo);
+	} catch (err) {
+		throw describe(err, `find the latest release of ${repo}`);
+	}
+}
+
+/** Downloads every plugin file of a release. */
+export async function downloadRelease(repo: string, release: LatestRelease): Promise<ReleaseFiles> {
+	const fetchFile = async (file: string, required: boolean): Promise<string | null> => {
+		try {
+			return await get(releaseFileUrl(repo, release.tag, file));
+		} catch (err) {
+			if (!required && err instanceof HttpError && err.status === 404) return null;
+			throw describe(err, `download ${file} of ${repo} ${release.tag}`);
+		}
+	};
 	const [manifestRaw, main, styles] = await Promise.all([
-		fetchAsset(repo, "manifest.json", true),
-		fetchAsset(repo, "main.js", true),
-		fetchAsset(repo, "styles.css", false),
+		fetchFile("manifest.json", true),
+		fetchFile("main.js", true),
+		fetchFile("styles.css", false),
 	]);
 	return {
 		manifest: parseManifest(manifestRaw as string, repo),
@@ -54,6 +97,17 @@ export async function fetchReadme(repo: string): Promise<string | null> {
 		if (res.status < 400) return res.text;
 	}
 	return null;
+}
+
+/** Turns a failure into an error message that names the step and URL that failed. */
+export function describe(err: unknown, action: string): Error {
+	if (err instanceof HttpError) {
+		const hint = err.status === 403 && err.url.includes("api.github.com")
+			? " (GitHub API rate limit reached, try again later)"
+			: "";
+		return new Error(`Could not ${action}: ${err.message}${hint}`);
+	}
+	return new Error(`Could not ${action}: ${(err as Error).message}`);
 }
 
 function parseManifest(raw: string, repo: string): PluginManifest {

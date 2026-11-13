@@ -19,7 +19,7 @@ A personal toolkit for [Obsidian](https://obsidian.md). Click the toolbox icon i
 
 ## Notes
 
-- Downloads use `github.com/<repo>/releases/latest/download/<file>`, so they are not subject to the GitHub API rate limit. Pre-releases are ignored.
+- Like Obsidian's own installer, the latest version is read from `manifest.json` on the default branch and the files are downloaded from `github.com/<repo>/releases/download/<version>/`. If that release does not exist, the GitHub API (60 requests/hour) is used to find the latest release. Pre-releases are ignored.
 - Enabling and reloading plugins uses undocumented Obsidian APIs (`app.plugins`) and may break in a future Obsidian version.
 
 ## Installation

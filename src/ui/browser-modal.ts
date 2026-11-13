@@ -1,6 +1,6 @@
 import { Component, debounce, MarkdownRenderer, Modal, Notice, setIcon } from "obsidian";
 import type ErencioToolkitPlugin from "../main";
-import { fetchLatestManifest, fetchReadme } from "../plugins/github";
+import { fetchLatestRelease, fetchReadme } from "../plugins/github";
 import { CommunityPlugin } from "../plugins/registry";
 import { compareVersions } from "../plugins/version";
 
@@ -161,7 +161,7 @@ export class PluginBrowserModal extends Modal {
 
 			let latest: string | null = null;
 			try {
-				latest = (await fetchLatestManifest(p.repo)).version;
+				latest = (await fetchLatestRelease(p.repo)).version;
 			} catch (err) {
 				if (stale()) return;
 				versionEl.setText(`${installed ? `Installed: ${installed.version} · ` : ""}Latest: unavailable`);
